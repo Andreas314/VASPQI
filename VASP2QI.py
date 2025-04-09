@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+import os
+import sys
+import numpy as np
+from multiprocessing import Pool, Value, Lock
+try:
+    #A library to extract bands, kpoints and momentum matrices from WAVECAR, see: https://github.com/QijingZheng/VaspBandUnfolding/blob/master/vaspwfc.py
+    import vaspwfc as vp
+except ImportError:
+    print("Error: vaspwfc not found! Try installing VaspBandUnfolding with pip install git+https://github.com/QijingZheng/VaspBandUnfolding.", file = sys.stderr)
+    sys.exit(1)
+
+#Physical constants
+H_PLANC = 6.582119569E-16 #Reduced Planc constant in eV/s
+M_ELECTRON = 9.1093837E-31 #Electron mass in kg
+E_CHARGE = 1.602176634E-19 #Elementary charge in C
+#Read number of workers from input
+NUM_P = int(sys.argv[5])
+
+def Read_input():
+    '''
+    Read name of a directory containing WAVECAR, weights of individual kpoints from OUTCAR (which cannot be read using vaspwfc, so they are extracted using a bash script) and a number of kpoints.
+    '''
+    input_weights = sys.argv[1]
+    file = sys.argv[3] + '/WAVECAR'
+    num_kpoints = int(float(sys.argv[2]))
+    k_weights = Make_weights(input_weights, num_kpoints)
+    return k_weights, file, num_kpoints
+
+def Correct_moment_mat(p):
+    return p
+
+def Make_weights(input_data, size):
+    '''
+    Process the input string of the weights of individual kpoints .
+    '''
+    weights = np.zeros(size,int)
+    data_split = input_data.split()
+    for ii in range(0,size):
+        try:
+            weights[ii] = int(float(data_split[ii]))
+        except ValueError:
+            print("Error: Cannot interpret ", data_split[ii], " as an integer. OUTCAR corrupted?", file = sys.stderr)
+            sys.exit(1)
+    return weights
+
+def Progres_bar(act_index, num_kpoints):
+    '''
+    Draw a progres bar to the stdout stating the percentage of sum over k-space computed
+    '''
+    progres_made = int(act_index/num_kpoints * 100)
+    print("\033[F", end = "")
+    print("\033[F", end = "")
+    print("Sum in kspace started: ", progres_made, " % done.")
+    print("|", end = "")
+    for ii in range(100):
+        if ii < progres_made:
+            print("\u2588", end = "")
+        else:
+            print(" ", end = "")
+    print("|", end = "\n")
+
+def Enter_Sum_Wrapper():
+    '''
+    Wrapper around the sum, which allows for a parallel run utilizing the multiprocessing library
+    Two global variables declared here:
+    lock: Allows for an update of the progres bar one worker at a time.
+    num: number of k-points already computed, shared variable between all workers
+    '''
+    global lock
+    global num
+    lock = Lock()
+    num = Value('i', 0)
+    #Does not overwrite the user input in the shell
+    print("\n") 
+    with Pool(NUM_P) as p:
+        return sum(p.map(Enter_Sum, range(0,NUM_P)))
+
+def Enter_Sum(index):
+    '''
+    Implementation of https://journals.aps.org/prb/abstract/10.1103/PhysRevB.68.085208
+    Start the sum over kspace. The actual sum contains 7 for loops, so they are broken into smaller functions.
+    First read the WAVECAR to wavecar_data and get band energies, k-points for the calculation and number of bands.
+    Frequency of the incident light omega is read from stdin. 
+    The delta function in the actual sum is replaced by Lorentzian centered at omega. Its width is a fraction of omega.
+    '''
+    #Read WAVECAR 
+    [k_weights, wavecar, num_kpoints] = Read_input()
+    wavecar_data = vp.vaspwfc(fnm = wavecar, lsorbit = True)
+    [ _ , energies] = wavecar_data.readWFBand()
+    k_vects = wavecar_data._kvecs
+    num_bands = wavecar_data._nbands
+
+    gamma = float(sys.argv[4]) * 0.2
+    qi_tensor = np.zeros([3,3,3], complex)
+    omega = float(sys.argv[4])
+    #Split kpoints for parallel run
+    chunk = num_kpoints / NUM_P
+    start_index = chunk * index
+    end_index = chunk * (index + 1)
+
+    for k in range(int(start_index), int(end_index)):
+        lock.acquire()
+        try:    
+            Progres_bar(num.value, num_kpoints)
+        finally:
+            lock.release()
+        qi_tensor += Band_Sum(k, energies[0,k,:], num_bands, k_weights[k], gamma, wavecar_data)
+        num.value += 1
+ 
+    volume = wavecar_data._Omega * 10**(-27) #Volume of the supercell used in VASP calculations in m^3
+    prefactor = np.pi / volume * 1j * (E_CHARGE / omega / M_ELECTRON)**3 * 10**(27)
+    qi_tensor *= prefactor
+    return qi_tensor
+
+def Band_Sum(k_index, bands_energies, n_bands, weight, gamma, wf_obj):
+    '''
+    Sum over all initial, finale and intemediate sattes
+    '''
+    inner_tensor_output = np.zeros([3,3,3], complex)
+    omega = float(sys.argv[4])
+    for initial in range(0, n_bands):
+        for final in range(0, n_bands):
+            omega_fv = (bands_energies[final] - bands_energies[initial]) / H_PLANC
+            for inter in range(0, n_bands):
+                omega_jv = (bands_energies[inter] - bands_energies[initial]) / H_PLANC
+                inner_tensor = Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index)
+                inner_tensor *= Lorentzian(omega_fv, 2 * omega, gamma)
+                inner_tensor /= (omega - omega_jv)
+                inner_tensor *= weight
+                inner_tensor_output += inner_tensor
+    return inner_tensor_output
+
+def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index):
+    '''
+    Compute all 27 elements of the tensor
+    '''
+    inner_inner_tensor = np.zeros([3,3,3], complex)
+    #Indices in vaspwfc start with 1
+    k_index += 1
+    fin += 1
+    init += 1
+    iner += 1
+    '''
+    Momentum matrices in vaspwfc are calculated as ~ <W_n| k + G| W_m>, where |W_n> is the pseudo wavefunction form VASP, G is a point in reciprocal lattice
+    and k is wavevector. We dont want to consider the part with k in QI calculations, so the p matrices have to be recalculated
+    '''
+    p_vf = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, init], [1, k_index, fin]))
+    p_fj = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, fin], [1, k_index, init]))
+    p_jv = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, iner], [1, k_index, init]))
+    #Sum over x,y,z coordinates
+    for i1 in range(0,3):
+        for i2 in range(0,3):
+            for i3 in range(0,3):
+                inner_inner_tensor[i1][i2][i3] = p_vf[i1] * p_fj[i2] * p_jv[i3]
+    return inner_inner_tensor
+
+def Gaussian(x, x0, sigma):
+    return 1./ ( np.sqrt( 2* np.pi ) * sigma) * np.exp( - np.power( (x - x0) / sigma, 2) / 2)
+def Lorentzian(x, x0, gamma):
+    return 1. / np.pi * gamma / ( (x - x0)**2 + gamma**2 )
+if __name__=="__main__":
+    print(Enter_Sum_Wrapper())
+    

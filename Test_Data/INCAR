@@ -1,0 +1,20 @@
+SYSTEM = GaAs SCF Calculation
+PREC = Accurate
+ENCUT = 500
+ISMEAR = 0  # Gaussian smearing for semiconductors
+SIGMA = 0.05
+EDIFF = 1E-7
+ALGO = Normal
+NELM = 100
+NSW = 0
+IBRION = -1
+ISIF = 2
+LCHARG = .TRUE.  # Store charge density for further calculations
+LWAVE = .TRUE.  # No need to write wavefunctions
+LORBIT = 11
+METAGGA = LMBJ
+#MAGNETIC PROPERTIES
+ISPIN = 2
+LSORBIT = .TRUE.
+LNONCOLLINEAR = .TRUE.
+MAGMOM = 0 0 0 0 0 0
