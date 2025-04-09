@@ -3,6 +3,7 @@ import os
 import sys
 import numpy as np
 from multiprocessing import Pool, Value, Lock
+from time import time
 try:
     #A library to extract bands, kpoints and momentum matrices from WAVECAR, see: https://github.com/QijingZheng/VaspBandUnfolding/blob/master/vaspwfc.py
     import vaspwfc as vp
@@ -11,9 +12,9 @@ except ImportError:
     sys.exit(1)
 
 #Physical constants
-H_PLANC = 6.582119569E-16 #Reduced Planc constant in eV/s
-M_ELECTRON = 9.1093837E-31 #Electron mass in kg
-E_CHARGE = 1.602176634E-19 #Elementary charge in C
+H_PLANC = 6.582119569E-16 #Reduced Planc constant in (eV/s)
+M_ELECTRON = 9.1093837E-31 #Electron mass in (kg)
+E_CHARGE = 1.602176634E-19 #Elementary charge in (C)
 #Read number of workers from input
 NUM_P = int(sys.argv[5])
 
@@ -32,7 +33,7 @@ def Correct_moment_mat(p):
 
 def Make_weights(input_data, size):
     '''
-    Process the input string of the weights of individual kpoints .
+    Process the input string of the weights of individual kpoints.
     '''
     weights = np.zeros(size,int)
     data_split = input_data.split()
@@ -60,6 +61,11 @@ def Progres_bar(act_index, num_kpoints):
             print(" ", end = "")
     print("|", end = "\n")
 
+def Get_gamma(kvecs):
+    dist = abs(kvecs[1]) - abs(kvecs[0])
+    omega_dist = dist**2  * H_PLANC / 2 / M_ELECTRON * E_CHARGE * 10**20
+    return 2*max(omega_dist)
+
 def Enter_Sum_Wrapper():
     '''
     Wrapper around the sum, which allows for a parallel run utilizing the multiprocessing library
@@ -76,6 +82,20 @@ def Enter_Sum_Wrapper():
     with Pool(NUM_P) as p:
         return sum(p.map(Enter_Sum, range(0,NUM_P)))
 
+def Find_valence_cond(bands, num_bands, efermi):
+    '''
+    Find indices of valnece and condution bands by comparing their energies in gamma point to the fermi energy
+    '''
+    conduction = []
+    valence = []
+    for ii in range(0, num_bands):
+        if bands[0, 0, ii] < efermi:
+            valence.append(ii)
+        else:
+            conduction.append(ii)
+    return valence, conduction
+
+
 def Enter_Sum(index):
     '''
     Implementation of https://journals.aps.org/prb/abstract/10.1103/PhysRevB.68.085208
@@ -90,52 +110,53 @@ def Enter_Sum(index):
     [ _ , energies] = wavecar_data.readWFBand()
     k_vects = wavecar_data._kvecs
     num_bands = wavecar_data._nbands
-
-    gamma = float(sys.argv[4]) * 0.2
-    qi_tensor = np.zeros([3,3,3], complex)
+    
+    [valence_states, conduction_states] = Find_valence_cond(energies, num_bands, wavecar_data._efermi)
+    gamma = Get_gamma(k_vects)
+    qi_tensor = np.zeros([3,3,3,3], complex)
     omega = float(sys.argv[4])
-    #Split kpoints for parallel run
-    chunk = num_kpoints / NUM_P
-    start_index = chunk * index
-    end_index = chunk * (index + 1)
-
-    for k in range(int(start_index), int(end_index)):
+    for k in range(int(index), num_kpoints, NUM_P):
+        if k >= NUM_P:
+            num.value += 1
         lock.acquire()
         try:    
             Progres_bar(num.value, num_kpoints)
         finally:
             lock.release()
-        qi_tensor += Band_Sum(k, energies[0,k,:], num_bands, k_weights[k], gamma, wavecar_data)
-        num.value += 1
+        gap_at_k = (energies[0,k,min(conduction_states)] - energies[0,k,max(valence_states)]) / H_PLANC
+        if (gap_at_k > omega):
+            continue
+        qi_tensor += Band_Sum(k, energies[0,k,:], num_bands, k_weights[k], gamma, wavecar_data, valence_states, conduction_states)
  
-    volume = wavecar_data._Omega * 10**(-27) #Volume of the supercell used in VASP calculations in m^3
-    prefactor = np.pi / volume * 1j * (E_CHARGE / omega / M_ELECTRON)**3 * 10**(27)
+    volume = wavecar_data._Omega * 10**(-30) #Volume of the supercell used in VASP calculations in m^3
+    prefactor = np.pi / volume * 1j * (E_CHARGE / M_ELECTRON)**4 * H_PLANC * (1 / omega)**3 * 10**(40) * E_CHARGE
     qi_tensor *= prefactor
     return qi_tensor
 
-def Band_Sum(k_index, bands_energies, n_bands, weight, gamma, wf_obj):
+def Band_Sum(k_index, bands_energies, n_bands, weight, gamma, wf_obj, valence_states, conduction_states):
     '''
-    Sum over all initial, finale and intemediate sattes
+    Sum over all valence, conduction and intemediate sattes
     '''
-    inner_tensor_output = np.zeros([3,3,3], complex)
+    inner_tensor_output = np.zeros([3,3,3,3], complex)
     omega = float(sys.argv[4])
-    for initial in range(0, n_bands):
-        for final in range(0, n_bands):
+    for initial in valence_states:
+        for final in conduction_states:
             omega_fv = (bands_energies[final] - bands_energies[initial]) / H_PLANC
             for inter in range(0, n_bands):
                 omega_jv = (bands_energies[inter] - bands_energies[initial]) / H_PLANC
-                inner_tensor = Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index)
+                inner_tensor = Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index, 'e')
+                inner_tensor += Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index, 'h')
                 inner_tensor *= Lorentzian(omega_fv, 2 * omega, gamma)
                 inner_tensor /= (omega - omega_jv)
                 inner_tensor *= weight
                 inner_tensor_output += inner_tensor
     return inner_tensor_output
 
-def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index):
+def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index, el_hole):
     '''
-    Compute all 27 elements of the tensor
+    Compute all 81 elements of the tensor
     '''
-    inner_inner_tensor = np.zeros([3,3,3], complex)
+    inner_inner_tensor = np.zeros([3,3,3,3], complex)
     #Indices in vaspwfc start with 1
     k_index += 1
     fin += 1
@@ -148,11 +169,16 @@ def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index):
     p_vf = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, init], [1, k_index, fin]))
     p_fj = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, fin], [1, k_index, init]))
     p_jv = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, iner], [1, k_index, init]))
+    if el_hole == 'h':
+        p_xx = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, init], [1, k_index, init]))
+    else:
+        p_xx = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, fin], [1, k_index, fin]))
     #Sum over x,y,z coordinates
     for i1 in range(0,3):
         for i2 in range(0,3):
             for i3 in range(0,3):
-                inner_inner_tensor[i1][i2][i3] = p_vf[i1] * p_fj[i2] * p_jv[i3]
+                for i4 in range(0,3):
+                    inner_inner_tensor[i1][i2][i3][i4] = p_xx[i1] * p_vf[i2] * (p_fj[i3] * p_jv[i4] + p_fj[i4] * p_jv[i3])/  2
     return inner_inner_tensor
 
 def Gaussian(x, x0, sigma):
@@ -160,5 +186,6 @@ def Gaussian(x, x0, sigma):
 def Lorentzian(x, x0, gamma):
     return 1. / np.pi * gamma / ( (x - x0)**2 + gamma**2 )
 if __name__=="__main__":
+    start = time()
     print(Enter_Sum_Wrapper())
-    
+    print(time() - start, "s" )
