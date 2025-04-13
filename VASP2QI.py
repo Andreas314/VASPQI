@@ -79,6 +79,7 @@ def Enter_Sum_Wrapper():
     num = Value('i', 0)
     #Does not overwrite the user input in the shell
     print("\n") 
+    print("\n") 
     with Pool(NUM_P) as p:
         return sum(p.map(Enter_Sum, range(0,NUM_P)))
 
