@@ -144,8 +144,8 @@ def Band_Sum(k_index, bands_energies, n_bands, weight, gamma, wf_obj, valence_st
             omega_fv = (bands_energies[final] - bands_energies[initial]) / H_PLANC
             for inter in range(0, n_bands):
                 omega_jv = (bands_energies[inter] - bands_energies[initial]) / H_PLANC
-                inner_tensor = Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index, 'e')
-                inner_tensor += Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index, 'h')
+                inner_tensor = Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index, 'h')
+                inner_tensor -= Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index, 'e')
                 inner_tensor *= Lorentzian(omega_fv, 2 * omega, gamma)
                 inner_tensor /= (omega - omega_jv)
                 inner_tensor *= weight
