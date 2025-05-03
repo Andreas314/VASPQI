@@ -66,8 +66,8 @@ def Progres_bar(act_index, num_kpoints):
 
 def Get_gamma(kvecs):
     dist = abs(kvecs[1]) - abs(kvecs[0])
-    omega_dist = dist**2  * H_PLANC / 2 / M_ELECTRON * E_CHARGE * 10**20
-    return 2*max(omega_dist)
+    omega_dist = np.linalg.norm(dist) * H_PLANC / 2 / M_ELECTRON * E_CHARGE * 10**20
+    return omega_dist
 
 def Enter_Sum_Wrapper():
     '''
@@ -129,23 +129,25 @@ def Enter_Sum(index):
         if k >= arguments.number_of_processes:
             num.value += 1
         lock.acquire()
-        try:    
+        try: 
+            pass
             Progres_bar(num.value, num_kpoints)
         finally:
             lock.release()
         gap_at_k = (energies[0,k,min(conduction_states)] - energies[0,k,max(valence_states)]) / H_PLANC
-        if (gap_at_k > omega):
-            continue
+       # if (gap_at_k  > 2 * omega):
+       #     continue
         qi_tensor += Band_Sum(k, energies[0,k,:], num_bands, k_weights[k], gamma, wavecar_data, valence_states, conduction_states)
     num.value += 1
     lock.acquire()
     try:    
+        pass
         Progres_bar(num.value, num_kpoints)
     finally:
         lock.release()
 
     volume = wavecar_data._Omega * 10**(-30) #Volume of the supercell used in VASP calculations in m^3
-    prefactor = np.pi / volume * 1j * (E_CHARGE / M_ELECTRON)**4 * H_PLANC * (1 / omega)**3 * 10**(40) * E_CHARGE
+    prefactor = (2 * np.pi) **3 / (sum(k_weights) * volume)  / 4 / np.pi ** 2 * 1j * (E_CHARGE / M_ELECTRON)**4 * H_PLANC * 10**(40) * E_CHARGE 
     qi_tensor *= prefactor
     return qi_tensor
 
@@ -153,22 +155,26 @@ def Band_Sum(k_index, bands_energies, n_bands, weight, gamma, wf_obj, valence_st
     '''
     Sum over all valence, conduction and intemediate sattes
     '''
+    #delta = max(np.matmul(wf_obj._kvecs[1], wf_obj._Bcell) - np.matmul(wf_obj._kvecs[0], wf_obj._Bcell))
+    #gamma = 2 * np.linalg.norm(np.matmul(wf_obj._kvecs[k_index], wf_obj._Bcell)) * delta
+    #gamma += delta ** 2
+    #gamma *= (H_PLANC / 2 / M_ELECTRON * E_CHARGE * 10**20)
     inner_tensor_output = np.zeros([3,3,3,3], complex)
     omega = arguments.omega
+    all_bnds = valence_states + conduction_states
     for initial in valence_states:
         for final in conduction_states:
             omega_fv = (bands_energies[final] - bands_energies[initial]) / H_PLANC
-            for inter in range(0, n_bands):
+            for inter in all_bnds:
                 omega_jv = (bands_energies[inter] - bands_energies[initial]) / H_PLANC
-                inner_tensor = Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index, 'h')
-                inner_tensor -= Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index, 'e')
+                inner_tensor = Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index)
                 inner_tensor *= Lorentzian(omega_fv, 2 * omega, gamma)
-                inner_tensor /= (omega - omega_jv)
+                inner_tensor /= (omega_fv / 2 - omega_jv) * ( omega_fv / 2 )**3
                 inner_tensor *= weight
                 inner_tensor_output += inner_tensor
     return inner_tensor_output
 
-def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index, el_hole):
+def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index):
     '''
     Compute all 81 elements of the tensor
     '''
@@ -183,25 +189,23 @@ def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index, el_hole):
     and k is wavevector. We dont want to consider the part with k in QI calculations, so the p matrices have to be recalculated
     '''
     p_vf = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, init], [1, k_index, fin]))
-    p_fj = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, fin], [1, k_index, init]))
+    p_fj = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, fin], [1, k_index, iner]))
     p_jv = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, iner], [1, k_index, init]))
-    if el_hole == 'h':
-        p_xx = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, init], [1, k_index, init]))
-    else:
-        p_xx = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, fin], [1, k_index, fin]))
+    p_vv = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, init], [1, k_index, init]))
+    p_ff = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, fin], [1, k_index, fin]))
     #Sum over x,y,z coordinates
     for i1 in range(0,3):
         for i2 in range(0,3):
             for i3 in range(0,3):
                 for i4 in range(0,3):
-                    inner_inner_tensor[i1][i2][i3][i4] = p_xx[i1] * p_vf[i2] * (p_fj[i3] * p_jv[i4] + p_fj[i4] * p_jv[i3])/  2
+                    inner_inner_tensor[i1][i2][i3][i4] = (p_vv[i1] - p_ff[i2]) * p_vf[i2] * (p_fj[i3] * p_jv[i4] + p_fj[i4] * p_jv[i3])/  2
     return inner_inner_tensor
 
 def Gaussian(x, x0, sigma):
     return 1./ ( np.sqrt( 2* np.pi ) * sigma) * np.exp( - np.power( (x - x0) / sigma, 2) / 2)
 def Lorentzian(x, x0, gamma):
-    return 1. / np.pi * gamma / ( (x - x0)**2 + gamma**2 )
+    return 1 / np.pi * gamma / ( (x - x0)**2 + gamma**2 )
 if __name__=="__main__":
     start = time()
-    print(Enter_Sum_Wrapper())
+    print(abs(Enter_Sum_Wrapper()[0,0,0,0]))
     print(time() - start, "s" )
