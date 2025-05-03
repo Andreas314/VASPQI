@@ -18,8 +18,6 @@ H_PLANC = 6.582119569E-16 #Reduced Planc constant in (eV/s)
 M_ELECTRON = 9.1093837E-31 #Electron mass in (kg)
 E_CHARGE = 1.602176634E-19 #Elementary charge in (C)
 
-input_weights, arguments = get_args()
-
 def Read_input():
     '''
     Read name of a directory containing WAVECAR, weights of individual kpoints from OUTCAR (which cannot be read using vaspwfc, so they are extracted using a bash script) and a number of kpoints.
@@ -69,20 +67,24 @@ def Get_gamma(kvecs):
     omega_dist = np.linalg.norm(dist) * H_PLANC / 2 / M_ELECTRON * E_CHARGE * 10**20
     return omega_dist
 
-def Enter_Sum_Wrapper():
+def Enter_Sum_Wrapper(arguments_in):
     '''
     Wrapper around the sum, which allows for a parallel run utilizing the multiprocessing library
     Two global variables declared here:
     lock: Allows for an update of the progres bar one worker at a time.
     num: number of k-points already computed, shared variable between all workers
     '''
+    global arguments
+    global input_weights
     global lock
     global num
+    arguments = arguments_in[1]
+    input_weights = arguments_in[0]
     lock = Lock()
     num = Value('i', 0)
     NP = arguments.number_of_processes
     #Does not overwrite the user input in the shell
-    print("\n") 
+    #print("\n") 
     print("\n") 
     with Pool(NP) as p:
         return sum(p.map(Enter_Sum, range(0,NP)))
@@ -201,11 +203,5 @@ def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index):
                     inner_inner_tensor[i1][i2][i3][i4] = (p_vv[i1] - p_ff[i2]) * p_vf[i2] * (p_fj[i3] * p_jv[i4] + p_fj[i4] * p_jv[i3])/  2
     return inner_inner_tensor
 
-def Gaussian(x, x0, sigma):
-    return 1./ ( np.sqrt( 2* np.pi ) * sigma) * np.exp( - np.power( (x - x0) / sigma, 2) / 2)
 def Lorentzian(x, x0, gamma):
     return 1 / np.pi * gamma / ( (x - x0)**2 + gamma**2 )
-if __name__=="__main__":
-    start = time()
-    print(abs(Enter_Sum_Wrapper()[0,0,0,0]))
-    print(time() - start, "s" )

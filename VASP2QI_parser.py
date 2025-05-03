@@ -69,6 +69,20 @@ def get_args():
                         help = 'Number of processes (parallel run) to which the kpoint loop is divided (DEFAULT: 1)',
                         default = 1
                         )
+    parser.add_argument('--omega_run',
+                        action = 'store_true',
+                        help = 'Switch for a loop over multiple frequencies. Starts at --omega. When on, --omega_step and --omega_max must be set as well')
+    parser.add_argument( '--omega_step',
+                        type = OMEGA_RESTRICTION,
+                        required = False,
+                        help = 'Size of one step between --omega and --omega_max in --omega_run (relative to --omega)',
+                        )
+    parser.add_argument( '--omega_max',
+                        type = OMEGA_RESTRICTION,
+                        required = False,
+                        help = 'Maximal frequency for which to compute the interference tensor (relative to --omega)',
+                        )
+
     arguments =  parser.parse_args()
     Process = subprocess.run(args=['./VASP2QI_kparsing.sh', arguments.source], capture_output = True)
     if Process.returncode != 0:
