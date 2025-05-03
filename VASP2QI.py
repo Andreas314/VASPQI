@@ -32,3 +32,5 @@ if __name__ == '__main__':
                 print(abs(tensor[0,0,0,0]))
                 arguments[1].omega = om
                 ii += 1
+    else:
+        tensor = Enter_Sum_Wrapper(arguments)
