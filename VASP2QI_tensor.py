@@ -108,7 +108,6 @@ def Find_valence_cond(bands, num_bands, efermi):
         valence = valence[index : num_valence]
     return valence, conduction
 
-
 def Enter_Sum(index):
     '''
     Implementation of https://journals.aps.org/prb/abstract/10.1103/PhysRevB.68.085208
@@ -126,10 +125,7 @@ def Enter_Sum(index):
     gamma = Get_gamma(k_vects)
     qi_tensor = np.zeros([3,3,3,3], complex)
     omega = arguments.omega
-    cell = wavecar_data._Acell
-    BZ_size = 2 * np.pi / np.array([np.linalg.norm(cell[0]), np.linalg.norm(cell[1]), np.linalg.norm(cell[2])])
-    print(BZ_size, '\n', k_vects, '\n\n\n')
-    for k in range(int(norms), num_kpoints, arguments.number_of_processes):
+    for k in range(int(index), num_kpoints, arguments.number_of_processes):
         if k >= arguments.number_of_processes:
             num.value += 1
         lock.acquire()
@@ -141,7 +137,13 @@ def Enter_Sum(index):
         if (gap_at_k > omega):
             continue
         qi_tensor += Band_Sum(k, energies[0,k,:], num_bands, k_weights[k], gamma, wavecar_data, valence_states, conduction_states)
- 
+    num.value += 1
+    lock.acquire()
+    try:    
+        Progres_bar(num.value, num_kpoints)
+    finally:
+        lock.release()
+
     volume = wavecar_data._Omega * 10**(-30) #Volume of the supercell used in VASP calculations in m^3
     prefactor = np.pi / volume * 1j * (E_CHARGE / M_ELECTRON)**4 * H_PLANC * (1 / omega)**3 * 10**(40) * E_CHARGE
     qi_tensor *= prefactor

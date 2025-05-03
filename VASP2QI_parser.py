@@ -63,13 +63,6 @@ def get_args():
                         help = 'How many bands below the fermi level are taken into the calculations (DEFAULT: 100)',
                         default = 100
                         )
-    parser.add_argument( '--kpoints_restriction',
-                       type = BZ_RESTRICTION, 
-                       required = False,
-                        help = 'What portion of the Brillouin zone is taken into the calculation in each direction (DEFAULT: 1 1 1)',
-                        default = [1,1,1],
-                        nargs = 3
-                        )
     parser.add_argument( '--number_of_processes',
                         type = NP_RESTRICTION,
                         required = False,
