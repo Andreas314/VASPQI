@@ -28,49 +28,49 @@ def get_args():
             description = 'Input arguments for VASPQI:',
             usage = 'Compute quantum interference tensor to get current density from VASP\'s WAVECAR and OUTCAR. '
             )
-    parser.add_argument('-o', '--omega',
+    parser.add_argument( '--omega',
                        type = OMEGA_RESTRICTION, 
                        required = True,
                        help = 'Frequency of the incident light (eg. 10E16 s^-1)',
                        )
-    parser.add_argument('-f', '--file_name',
+    parser.add_argument( '--file_name',
                        type = str, 
                        required = False,
                         help = 'Name of the file to which the output is written (DEFAULT: QI_TENSOR)',
                         default = 'QI_TENSOR'
                        )
-    parser.add_argument('-d', '--directory_name',
+    parser.add_argument( '--directory_name',
                        type = str, 
                        required = False,
                         help = 'Name of the directory to which the output files are saved (DEFAULT: VASP2QI_RESULTS)',
                         default = 'VASP2QI_RESULTS'
                        )
-    parser.add_argument('-s', '--source',
+    parser.add_argument( '--source',
                        type = str, 
                        required = False,
                         help = 'Name of the directory which the inputs are stored in (DEFAULT: .)',
                         default = '.'
                         )
-    parser.add_argument('-c', '--conduction_bands',
+    parser.add_argument( '--conduction_bands',
                        type = BAND_RESTRICTION, 
                        required = False,
                         help = 'How many bands above the fermi level are taken into the calculations (DEFAULT: 100)',
                         default = 100
                         )
-    parser.add_argument('-v', '--valence_bands',
+    parser.add_argument( '--valence_bands',
                        type = BAND_RESTRICTION, 
                        required = False,
                         help = 'How many bands below the fermi level are taken into the calculations (DEFAULT: 100)',
                         default = 100
                         )
-    parser.add_argument('-k', '--kpoints_restriction',
+    parser.add_argument( '--kpoints_restriction',
                        type = BZ_RESTRICTION, 
                        required = False,
                         help = 'What portion of the Brillouin zone is taken into the calculation in each direction (DEFAULT: 1 1 1)',
                         default = [1,1,1],
                         nargs = 3
                         )
-    parser.add_argument('-np', '--number_of_processes',
+    parser.add_argument( '--number_of_processes',
                         type = NP_RESTRICTION,
                         required = False,
                         help = 'Number of processes (parallel run) to which the kpoint loop is divided (DEFAULT: 1)',

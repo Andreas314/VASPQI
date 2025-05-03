@@ -17,7 +17,9 @@ except ImportError:
 H_PLANC = 6.582119569E-16 #Reduced Planc constant in (eV/s)
 M_ELECTRON = 9.1093837E-31 #Electron mass in (kg)
 E_CHARGE = 1.602176634E-19 #Elementary charge in (C)
+
 input_weights, arguments = get_args()
+
 def Read_input():
     '''
     Read name of a directory containing WAVECAR, weights of individual kpoints from OUTCAR (which cannot be read using vaspwfc, so they are extracted using a bash script) and a number of kpoints.
@@ -88,14 +90,22 @@ def Enter_Sum_Wrapper():
 def Find_valence_cond(bands, num_bands, efermi):
     '''
     Find indices of valnece and condution bands by comparing their energies in gamma point to the fermi energy
+    Also takes only as many bands as specified (if specified number is smaller 
+    than the number of bands from the VASP calculation)
     '''
     conduction = []
     valence = []
     for ii in range(0, num_bands):
-        if bands[0, 0, ii] < efermi:
+        if (bands[0, 0, ii] < efermi):
             valence.append(ii)
         else:
             conduction.append(ii)
+    if len(conduction) > arguments.conduction_bands:
+        conduction = conduction[0 : arguments.conduction_bands]
+    if len(valence) > arguments.valence_bands:
+        num_valence = len(valence)
+        index = num_valence - arguments.valence_bands
+        valence = valence[index : num_valence]
     return valence, conduction
 
 
@@ -112,12 +122,14 @@ def Enter_Sum(index):
     [ _ , energies] = wavecar_data.readWFBand()
     k_vects = wavecar_data._kvecs
     num_bands = wavecar_data._nbands
-    
     [valence_states, conduction_states] = Find_valence_cond(energies, num_bands, wavecar_data._efermi)
     gamma = Get_gamma(k_vects)
     qi_tensor = np.zeros([3,3,3,3], complex)
     omega = arguments.omega
-    for k in range(int(index), num_kpoints, arguments.number_of_processes):
+    cell = wavecar_data._Acell
+    BZ_size = 2 * np.pi / np.array([np.linalg.norm(cell[0]), np.linalg.norm(cell[1]), np.linalg.norm(cell[2])])
+    print(BZ_size, '\n', k_vects, '\n\n\n')
+    for k in range(int(norms), num_kpoints, arguments.number_of_processes):
         if k >= arguments.number_of_processes:
             num.value += 1
         lock.acquire()
@@ -140,7 +152,7 @@ def Band_Sum(k_index, bands_energies, n_bands, weight, gamma, wf_obj, valence_st
     Sum over all valence, conduction and intemediate sattes
     '''
     inner_tensor_output = np.zeros([3,3,3,3], complex)
-    omega = float(sys.argv[4])
+    omega = arguments.omega
     for initial in valence_states:
         for final in conduction_states:
             omega_fv = (bands_energies[final] - bands_energies[initial]) / H_PLANC
