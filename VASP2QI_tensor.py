@@ -4,6 +4,8 @@ import sys
 import numpy as np
 from multiprocessing import Pool, Value, Lock
 from time import time
+sys.path.append(os.path.abspath("/home/piratmori28/Desktop/Thesis/VASPQI"))
+from VASP2QI_parser import get_args
 try:
     #A library to extract bands, kpoints and momentum matrices from WAVECAR, see: https://github.com/QijingZheng/VaspBandUnfolding/blob/master/vaspwfc.py
     import vaspwfc as vp
@@ -15,18 +17,17 @@ except ImportError:
 H_PLANC = 6.582119569E-16 #Reduced Planc constant in (eV/s)
 M_ELECTRON = 9.1093837E-31 #Electron mass in (kg)
 E_CHARGE = 1.602176634E-19 #Elementary charge in (C)
-#Read number of workers from input
-NUM_P = int(sys.argv[5])
-
+input_weights, arguments = get_args()
 def Read_input():
     '''
     Read name of a directory containing WAVECAR, weights of individual kpoints from OUTCAR (which cannot be read using vaspwfc, so they are extracted using a bash script) and a number of kpoints.
     '''
-    input_weights = sys.argv[1]
-    file = sys.argv[3] + '/WAVECAR'
-    num_kpoints = int(float(sys.argv[2]))
+
+    file = arguments.source + '/WAVECAR'
+    wavecar_data = vp.vaspwfc(fnm = file, lsorbit = True)
+    num_kpoints = len(wavecar_data._kvecs)
     k_weights = Make_weights(input_weights, num_kpoints)
-    return k_weights, file, num_kpoints
+    return k_weights, wavecar_data, num_kpoints
 
 def Correct_moment_mat(p):
     return p
@@ -77,11 +78,12 @@ def Enter_Sum_Wrapper():
     global num
     lock = Lock()
     num = Value('i', 0)
+    NP = arguments.number_of_processes
     #Does not overwrite the user input in the shell
     print("\n") 
     print("\n") 
-    with Pool(NUM_P) as p:
-        return sum(p.map(Enter_Sum, range(0,NUM_P)))
+    with Pool(NP) as p:
+        return sum(p.map(Enter_Sum, range(0,NP)))
 
 def Find_valence_cond(bands, num_bands, efermi):
     '''
@@ -106,8 +108,7 @@ def Enter_Sum(index):
     The delta function in the actual sum is replaced by Lorentzian centered at omega. Its width is a fraction of omega.
     '''
     #Read WAVECAR 
-    [k_weights, wavecar, num_kpoints] = Read_input()
-    wavecar_data = vp.vaspwfc(fnm = wavecar, lsorbit = True)
+    [k_weights, wavecar_data, num_kpoints] = Read_input()
     [ _ , energies] = wavecar_data.readWFBand()
     k_vects = wavecar_data._kvecs
     num_bands = wavecar_data._nbands
@@ -115,9 +116,9 @@ def Enter_Sum(index):
     [valence_states, conduction_states] = Find_valence_cond(energies, num_bands, wavecar_data._efermi)
     gamma = Get_gamma(k_vects)
     qi_tensor = np.zeros([3,3,3,3], complex)
-    omega = float(sys.argv[4])
-    for k in range(int(index), num_kpoints, NUM_P):
-        if k >= NUM_P:
+    omega = arguments.omega
+    for k in range(int(index), num_kpoints, arguments.number_of_processes):
+        if k >= arguments.number_of_processes:
             num.value += 1
         lock.acquire()
         try:    
