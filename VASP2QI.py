@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+import subprocess
 def BZ_RESTRICTION(value):
         value = float(value)
         if (value <= 0) or (value > 1):
@@ -76,6 +77,9 @@ if __name__ == '__main__':
                         default = 1
                         )
     arguments =  parser.parse_args()
-    print(arguments)
-
+    Process = subprocess.run(args=['./VASP2QI_kparsing.sh', arguments.source], capture_output = True)
+    if Process.returncode != 0:
+        print(Process.stderr)
+        sys.exit(Process.returncode)
+    print(Process.stdout)
 
