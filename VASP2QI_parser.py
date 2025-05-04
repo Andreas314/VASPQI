@@ -6,22 +6,22 @@ import subprocess
 def BZ_RESTRICTION(value):
         value = float(value)
         if (value <= 0) or (value > 1):
-            raise argparse.ArgumentTypeError('Value for the restriction of the BZ must be:  0 < k <= 1!')
+            raise argparse.ArgumentTypeError('Value for the restriction of the BZ must be:  0 < k <= 1!',file = sys.stderr)
         return value
 def BAND_RESTRICTION(value):
     value = int(value)
     if value < 0:
-        raise argparse.ArgumentTypeError('Value for the restriction of number of band must positive!')
+        raise argparse.ArgumentTypeError('Value for the restriction of number of band must positive!',file = sys.stderr)
     return value
 def OMEGA_RESTRICTION(value):
     value = float(value)
     if value < 0:
-        raise argparse.ArgumentTypeError('Frequency must be positive!')
+        raise argparse.ArgumentTypeError('Frequency must be positive!',file = sys.stderr)
     return value
 def NP_RESTRICTION(value):
     value = int(value)
     if value < 0:
-        raise argparse.ArgumentTypeError('Number of processes must be positive!')
+        raise argparse.ArgumentTypeError('Number of processes must be positive!',file = sys.stderr)
     return value
 def get_args():
     parser = argparse.ArgumentParser(
@@ -63,7 +63,8 @@ def get_args():
                         help = 'How many bands below the fermi level are taken into the calculations (DEFAULT: 100)',
                         default = 100
                         )
-    parser.add_argument( '--number_of_processes',
+    parser.add_argument( '--np',
+                        dest = 'number_of_processes',
                         type = NP_RESTRICTION,
                         required = False,
                         help = 'Number of processes (parallel run) to which the kpoint loop is divided (DEFAULT: 1)',

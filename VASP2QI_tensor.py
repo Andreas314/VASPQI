@@ -99,16 +99,16 @@ def Progres_bar(act_index, num_kpoints):
     Draw a progres bar to the stdout stating the percentage of sum over k-space computed
     '''
     progres_made = int(act_index/num_kpoints * 100)
-    print("\033[F", end = "")
-    print("\033[F", end = "")
-    print("Sum in kspace started: ", progres_made, " % done.")
-    print("|", end = "")
+    print("\033[F", end = "", file = sys.stderr)
+    print("\033[F", end = "", file = sys.stderr)
+    print("Sum in kspace started: ", progres_made, " % done.", file = sys.stderr)
+    print("|", end = "", file = sys.stderr)
     for ii in range(100):
         if ii < progres_made:
-            print("\u2588", end = "")
+            print("\u2588", end = "", file = sys.stderr)
         else:
-            print(" ", end = "")
-    print("|", end = "\n")
+            print(" ", end = "", file = sys.stderr)
+    print("|", end = "\n", file = sys.stderr)
 
 def Get_gamma(kvecs):
     dist = abs(kvecs[1]) - abs(kvecs[0])
@@ -133,7 +133,7 @@ def Enter_Sum_Wrapper(arguments_in):
     NP = arguments.number_of_processes
     #Does not overwrite the user input in the shell
     #print("\n") 
-    print("\n") 
+    print("\n", file = sys.stderr) 
     with Pool(NP) as p:
         return sum(p.map(Enter_Sum, range(0,NP)))
 
