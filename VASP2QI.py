@@ -34,3 +34,4 @@ if __name__ == '__main__':
                 ii += 1
     else:
         tensor = Enter_Sum_Wrapper(arguments)
+        print(abs(tensor[0,0,0,0]))

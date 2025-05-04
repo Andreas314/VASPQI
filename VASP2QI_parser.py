@@ -82,7 +82,10 @@ def get_args():
                         required = False,
                         help = 'Maximal frequency for which to compute the interference tensor (relative to --omega)',
                         )
-
+    parser.add_argument('--exclude_k',
+                        action = 'store_true',
+                        help = 'Whether to exclude the k terms in the momentum matrices')
+    
     arguments =  parser.parse_args()
     Process = subprocess.run(args=['./VASP2QI_kparsing.sh', arguments.source], capture_output = True)
     if Process.returncode != 0:

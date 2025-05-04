@@ -29,8 +29,56 @@ def Read_input():
     k_weights = Make_weights(input_weights, num_kpoints)
     return k_weights, wavecar_data, num_kpoints
 
-def Correct_moment_mat(p):
-    return p
+def Correct_moment_mat(ks_i, ks_j, vasp_wfc):
+    # ks_i and ks_j are list containing spin-, kpoint- and band-index of the
+
+        # k-points in direct coordinate
+        if not arguments.exclude_k:
+            k0 = vasp_wfc._kvecs[ks_i[1] - 1]
+        else:
+            k0 = 0
+        # plane-waves in direct coordinates
+        G0 = vasp_wfc.gvectors(ikpt=ks_i[1])
+        # G + k in Cartesian coordinates
+        Gk = np.dot(
+            G0 + k0,                            # G in direct coordinates
+            vasp_wfc._Bcell * 2 * np.pi            # reciprocal basis x 2pi
+        )
+
+        # plane-wave coefficients for initial (mk) and final (nk) states
+        CG_mk = vasp_wfc.readBandCoeff(*ks_i)
+        CG_nk = vasp_wfc.readBandCoeff(*ks_j)
+        ovlap = CG_nk.conj() * CG_mk
+
+        ################################################################################
+        # Momentum operator matrix element between pseudo-wavefunctions
+        ################################################################################
+        if vasp_wfc._lgam:
+            # for gamma-only, only half the plane-wave coefficients are stored.
+            # Moreover, the coefficients are multiplied by a factor of sqrt2
+
+            # G > 0 part
+            moment_mat_ps = np.sum(ovlap[:,None] * Gk, axis=0)
+
+            # For gamma-only version, add the other half plane-waves, G_ = -G
+            # G < 0 part, C(G) = C(-G).conj()
+            moment_mat_ps -= np.sum(
+                    ovlap[:,None].conj() * Gk,
+                    axis=0)
+
+            # remove the sqrt2 factor added by VASP
+            moment_mat_ps /= 2.0
+
+        elif vasp_wfc._lsoc:
+            moment_mat_ps = np.sum(
+                ovlap[:, None] * np.r_[Gk, Gk],
+                axis=0)
+        else:
+            moment_mat_ps = np.sum(
+                ovlap[:,None] * Gk, axis=0
+            )
+
+        return moment_mat_ps
 
 def Make_weights(input_data, size):
     '''
@@ -169,14 +217,14 @@ def Band_Sum(k_index, bands_energies, n_bands, weight, gamma, wf_obj, valence_st
             omega_fv = (bands_energies[final] - bands_energies[initial]) / H_PLANC
             for inter in all_bnds:
                 omega_jv = (bands_energies[inter] - bands_energies[initial]) / H_PLANC
-                inner_tensor = Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index)
+                inner_tensor = Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index, wf_obj)
                 inner_tensor *= Lorentzian(omega_fv, 2 * omega, gamma)
                 inner_tensor /= (omega_fv / 2 - omega_jv) * ( omega_fv / 2 )**3
                 inner_tensor *= weight
                 inner_tensor_output += inner_tensor
     return inner_tensor_output
 
-def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index):
+def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index, wf):
     '''
     Compute all 81 elements of the tensor
     '''
@@ -190,11 +238,11 @@ def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index):
     Momentum matrices in vaspwfc are calculated as ~ <W_n| k + G| W_m>, where |W_n> is the pseudo wavefunction form VASP, G is a point in reciprocal lattice
     and k is wavevector. We dont want to consider the part with k in QI calculations, so the p matrices have to be recalculated
     '''
-    p_vf = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, init], [1, k_index, fin]))
-    p_fj = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, fin], [1, k_index, iner]))
-    p_jv = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, iner], [1, k_index, init]))
-    p_vv = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, init], [1, k_index, init]))
-    p_ff = Correct_moment_mat(wf_obj.get_moment_mat([1, k_index, fin], [1, k_index, fin]))
+    p_vf = Correct_moment_mat([1, k_index, init], [1, k_index, fin], wf)
+    p_fj = Correct_moment_mat([1, k_index, fin], [1, k_index, iner], wf)
+    p_jv = Correct_moment_mat([1, k_index, iner], [1, k_index, init], wf)
+    p_vv = Correct_moment_mat([1, k_index, init], [1, k_index, init], wf)
+    p_ff = Correct_moment_mat([1, k_index, fin], [1, k_index, fin], wf)
     #Sum over x,y,z coordinates
     for i1 in range(0,3):
         for i2 in range(0,3):
