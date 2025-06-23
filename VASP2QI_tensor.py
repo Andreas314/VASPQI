@@ -111,8 +111,8 @@ def Progres_bar(act_index, num_kpoints):
     print("|", end = "\n", file = sys.stderr)
 
 def Get_gamma(kvecs):
-    dist = abs(kvecs[1]) - abs(kvecs[0])
-    omega_dist = np.linalg.norm(dist) * H_PLANC / 2 / M_ELECTRON * E_CHARGE * 10**20
+    dist = np.linalg.norm((kvecs[1]) - kvecs[0])
+    omega_dist = np.linalg.norm(dist) * H_PLANC / M_ELECTRON * E_CHARGE * 10**20
     return omega_dist
 
 def Enter_Sum_Wrapper(arguments_in):
@@ -164,7 +164,7 @@ def Enter_Sum(index):
     Start the sum over kspace. The actual sum contains 7 for loops, so they are broken into smaller functions.
     First read the WAVECAR to wavecar_data and get band energies, k-points for the calculation and number of bands.
     Frequency of the incident light omega is read from stdin. 
-    The delta function in the actual sum is replaced by Lorentzian centered at omega. Its width is a fraction of omega.
+    The delta function in the actual sum is replaced by Gauss centered at omega. Its width is a fraction of omega.
     '''
     #Read WAVECAR 
     [k_weights, wavecar_data, num_kpoints] = Read_input()
@@ -172,7 +172,7 @@ def Enter_Sum(index):
     k_vects = wavecar_data._kvecs
     num_bands = wavecar_data._nbands
     [valence_states, conduction_states] = Find_valence_cond(energies, num_bands, wavecar_data._efermi)
-    gamma = Get_gamma(k_vects)
+    gamma = Get_gamma(k_vects) / 5
     qi_tensor = np.zeros([3,3,3,3], complex)
     omega = arguments.omega
     for k in range(int(index), num_kpoints, arguments.number_of_processes):
@@ -185,8 +185,8 @@ def Enter_Sum(index):
         finally:
             lock.release()
         gap_at_k = (energies[0,k,min(conduction_states)] - energies[0,k,max(valence_states)]) / H_PLANC
-       # if (gap_at_k  > 2 * omega):
-       #     continue
+        #if (gap_at_k  > 2 * omega):
+        #    continue
         qi_tensor += Band_Sum(k, energies[0,k,:], num_bands, k_weights[k], gamma, wavecar_data, valence_states, conduction_states)
     num.value += 1
     lock.acquire()
@@ -218,7 +218,8 @@ def Band_Sum(k_index, bands_energies, n_bands, weight, gamma, wf_obj, valence_st
             for inter in all_bnds:
                 omega_jv = (bands_energies[inter] - bands_energies[initial]) / H_PLANC
                 inner_tensor = Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index, wf_obj)
-                inner_tensor *= Lorentzian(omega_fv, 2 * omega, gamma)
+                inner_tensor *= Gauss(omega_fv, 2 * omega, gamma)
+                #print(Gauss(omega_fv, 2 * omega, gamma), bands_energies[final] - bands_energies[initial], inner_tensor[0][0][0][0])
                 inner_tensor /= (omega_fv / 2 - omega_jv) * ( omega_fv / 2 )**3
                 inner_tensor *= weight
                 inner_tensor_output += inner_tensor
@@ -251,5 +252,5 @@ def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index, wf):
                     inner_inner_tensor[i1][i2][i3][i4] = (p_vv[i1] - p_ff[i2]) * p_vf[i2] * (p_fj[i3] * p_jv[i4] + p_fj[i4] * p_jv[i3])/  2
     return inner_inner_tensor
 
-def Lorentzian(x, x0, gamma):
-    return 1 / np.pi * gamma / ( (x - x0)**2 + gamma**2 )
+def Gauss(x, x0, gamma):
+        return 1 / (2 * np.pi) ** (1/2) / gamma * np.exp( - (x-x0)**2 / 2 / gamma**2)
