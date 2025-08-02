@@ -6,6 +6,6 @@ test -f "$file/KPOINTS" || echo "Error: KPOINTS not found!" >&2
 test -f "$file/KPOINTS" || exit 1
 test -f "$file/OUTCAR" || echo "Error: OUTCAR not found!" >&2
 test -f "$file/OUTCAR" || exit 1
-num_kpoints="$(grep "Following reciprocal coordinates" $file/OUTCAR -B3|grep Found|cut -d " " -f 6)"
+num_kpoints="$(grep "Following reciprocal coordinates" $file/OUTCAR -B3|grep Found| tr -s ' ' | cut -d " " -f 3)"
 weights="$(grep "Following reciprocal coordinates" Test_Data/OUTCAR -A "$(( $num_kpoints + 1 ))"|tail -n $num_kpoints| tr "-" " "| tr -s " "| cut -d " " -f 5)"
 echo $weights
