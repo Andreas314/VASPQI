@@ -2,7 +2,7 @@
 import sys
 import os
 import numpy as np
-sys.path.append(os.path.abspath("/home/piratmori28/Desktop/Thesis/VASPQI"))
+#sys.path.append(os.path.abspath("/home/piratmori28/Desktop/Thesis/VASPQI"))
 from VASP2QI_parser import get_args
 from VASP2QI_tensor import Enter_Sum_Wrapper
 
@@ -17,7 +17,7 @@ if __name__ == '__main__':
         elif (arguments[1].omega_max < 1):
             print('Warning: --omega must not be greater than --omega_max! \nAbonding the frequency loop!', file = sys.stderr)
             tensor = Enter_Sum_Wrapper(arguments)
-            print(arguments[1]/omega, abs(tensor[0,0,0,0]), abs(tensor[0,0,1,1]), abs(tensor[0,1,1,0]))
+            print(arguments[1].omega, abs(tensor[0,0,0]), abs(tensor[0,5,1]), abs(tensor[0,1,0]))
         else:
             print('Entering a loop over frequencies:',file = sys.stderr)
             omega = arguments[1].omega
@@ -31,7 +31,7 @@ if __name__ == '__main__':
                 print('Calculation: ', ii, '/', len(freq),file = sys.stderr)
                 print('Omega: ', '%.2E' % om,file = sys.stderr)
                 tensor = Enter_Sum_Wrapper(arguments)
-                print(om, abs(tensor[0,0,0,0]), abs(tensor[0,0,1,1]), abs(tensor[0,1,1,0]))
+                print(om, abs(tensor[0,0,0]), abs(tensor[0,1,5]), abs(tensor[0,0,2]))
                 arguments[1].omega = om
                 ii += 1
     else:

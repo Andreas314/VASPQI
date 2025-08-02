@@ -173,7 +173,7 @@ def Enter_Sum(index):
     num_bands = wavecar_data._nbands
     [valence_states, conduction_states] = Find_valence_cond(energies, num_bands, wavecar_data._efermi)
     gamma = Get_gamma(k_vects) / 5
-    qi_tensor = np.zeros([3,3,3,3], complex)
+    qi_tensor = np.zeros([3,3,6], complex)
     omega = arguments.omega
     for k in range(int(index), num_kpoints, arguments.number_of_processes):
         if k >= arguments.number_of_processes:
@@ -209,7 +209,7 @@ def Band_Sum(k_index, bands_energies, n_bands, weight, gamma, wf_obj, valence_st
     #gamma = 2 * np.linalg.norm(np.matmul(wf_obj._kvecs[k_index], wf_obj._Bcell)) * delta
     #gamma += delta ** 2
     #gamma *= (H_PLANC / 2 / M_ELECTRON * E_CHARGE * 10**20)
-    inner_tensor_output = np.zeros([3,3,3,3], complex)
+    inner_tensor_output = np.zeros([3,3,6], complex)
     omega = arguments.omega
     all_bnds = valence_states + conduction_states
     for initial in valence_states:
@@ -229,7 +229,7 @@ def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index, wf):
     '''
     Compute all 81 elements of the tensor
     '''
-    inner_inner_tensor = np.zeros([3,3,3,3], complex)
+    inner_inner_tensor = np.zeros([3,3,6], complex)
     #Indices in vaspwfc start with 1
     k_index += 1
     fin += 1
@@ -244,12 +244,14 @@ def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index, wf):
     p_jv = Correct_moment_mat([1, k_index, iner], [1, k_index, init], wf)
     p_vv = Correct_moment_mat([1, k_index, init], [1, k_index, init], wf)
     p_ff = Correct_moment_mat([1, k_index, fin], [1, k_index, fin], wf)
+    indices_symmetry = [[0,0], [1,1], [2,2], [1,2], [0,2], [0,1]]
     #Sum over x,y,z coordinates
     for i1 in range(0,3):
         for i2 in range(0,3):
-            for i3 in range(0,3):
-                for i4 in range(0,3):
-                    inner_inner_tensor[i1][i2][i3][i4] = (p_vv[i1] - p_ff[i2]) * p_vf[i2] * (p_fj[i3] * p_jv[i4] + p_fj[i4] * p_jv[i3])/  2
+            for i_s in range(0,6):
+                    i3 = indices_symmetry[i_s][0]
+                    i4 = indices_symmetry[i_s][1]
+                    inner_inner_tensor[i1][i2][i_s] = (p_vv[i1] - p_ff[i2]) * p_vf[i2] * (p_fj[i3] * p_jv[i4] + p_fj[i4] * p_jv[i3])/  2
     return inner_inner_tensor
 
 def Gauss(x, x0, gamma):
