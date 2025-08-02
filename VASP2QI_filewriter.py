@@ -19,8 +19,9 @@ def Write_tensor(arguments):
         for a1 in range(0,3):
             for a2 in range(0,3):
                 for a3 in range(0,6):
-                    element = ' '*24 + signs_1[a1] + signs_1[a1] + signs_2[a2] + ' '*24
+                    element = ' '*25 + signs_1[a1] + signs_1[a2] + signs_2[a3] + ' '*25
                     line += element
+        line += '\n'
         file.write(line)
 
         omega_run = arguments[1].omega_run
@@ -72,8 +73,8 @@ def Write_to_file(file, omega, tensor):
             for a3 in range(0,6):
                 element = tensor[a1][a2][a3]
                 print(element.real)
-                line += f"{element.real:>20.5e}{'+' if element.imag >= 0 else '-'}i{abs(element.imag):<20.5e}"
-    print(line)
+                line += f"{element.real:>20.5e}{'+' if element.imag >= 0 else '-'}1j*{abs(element.imag):<20.5e}"
+    line += '\n'
     file.write(line)
 
 
