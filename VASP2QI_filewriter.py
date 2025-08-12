@@ -26,8 +26,8 @@ def Write_tensor(arguments):
         line += '\n'
         file.write(line)
 
-        omega_run = arguments[1].omega_run
-        if (omega_run):
+        arguments[1].omega = arguments[1].omega / H_PLANC
+        if (arguments[1].omega_run):
             if (arguments[1].omega_step == None) or (arguments[1].omega_max == None):
                 Write_omega_max_step_missing(file, arguments)
             elif (arguments[1].omega_max < 1):
@@ -53,19 +53,19 @@ def Write_single_omega(f, arg):
 
 def Write_multiple_omega(f, arg):
     print('Entering a loop over frequencies:',file = sys.stderr)
-    omega = arg[1].omega
-    omega_step = arg[1].omega_step * omega
-    omega_max = arg[1].omega_max * omega
+    omega = arg[1].omega 
+    omega_step = arg[1].omega_step / H_PLANC
+    omega_max = arg[1].omega_max / H_PLANC
     print('Going from ', '%.2E' % omega, 'to ', '%.2E' % omega_max, 'with a step of ', '%.2E' % omega_step, file = sys.stderr)
     freq = np.arange(omega, omega_max + omega_step, omega_step)
     ii = 1
     for om in freq:
+        arg[1].omega = om
         print('', file = sys.stderr)
         print('Calculation: ', ii, '/', len(freq),file = sys.stderr)
-        print('Omega: ', '%.2E' % om,file = sys.stderr)
+        print('Omega: ', '%.2E' % (om * H_PLANC),file = sys.stderr)
         tensor = Enter_Sum_Wrapper(arg)
-        Write_to_file(f, arg[1].omega, tensor)
-        arg[1].omega = om
+        Write_to_file(f, om, tensor)
         ii += 1
 
 def Write_to_file(file, omega, tensor):

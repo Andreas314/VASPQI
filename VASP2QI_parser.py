@@ -31,7 +31,7 @@ def get_args():
     parser.add_argument( '--omega',
                        type = OMEGA_RESTRICTION, 
                        required = True,
-                       help = 'Frequency of the incident light (eg. 10E16 s^-1)',
+                       help = 'Frequency of the incident light (in eV)',
                        )
     parser.add_argument( '--file_name',
                        type = str, 
@@ -76,12 +76,12 @@ def get_args():
     parser.add_argument( '--omega_step',
                         type = OMEGA_RESTRICTION,
                         required = False,
-                        help = 'Size of one step between --omega and --omega_max in --omega_run (relative to --omega)',
+                        help = 'Size of one step between --omega and --omega_max in --omega_run (in eV)',
                         )
     parser.add_argument( '--omega_max',
                         type = OMEGA_RESTRICTION,
                         required = False,
-                        help = 'Maximal frequency for which to compute the interference tensor (relative to --omega)',
+                        help = 'Maximal frequency for which to compute the interference tensor (in eV)',
                         )
     parser.add_argument('--exclude_k',
                         action = 'store_true',
