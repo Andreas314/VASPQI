@@ -135,7 +135,11 @@ def Enter_Sum_Wrapper(arguments_in):
     #print("\n") 
     print("\n", file = sys.stderr) 
     with Pool(NP) as p:
-        return sum(p.map(Enter_Sum, range(0,NP)))
+        result = sum(p.map(Enter_Sum, range(0,NP)))
+    if not arguments.silence:
+        Progres_bar(100, 100)
+    return result
+
 
 def Find_valence_cond(bands, num_bands, efermi):
     '''
@@ -146,7 +150,7 @@ def Find_valence_cond(bands, num_bands, efermi):
     conduction = []
     valence = []
     for ii in range(0, num_bands):
-        if (bands[0, 0, ii] < efermi):
+        if (bands[0, 0, ii] <= efermi):
             valence.append(ii)
         else:
             conduction.append(ii)
@@ -172,32 +176,22 @@ def Enter_Sum(index):
     k_vects = wavecar_data._kvecs
     num_bands = wavecar_data._nbands
     [valence_states, conduction_states] = Find_valence_cond(energies, num_bands, wavecar_data._efermi)
-    gamma = Get_gamma(k_vects) / 5
+    gamma = Get_gamma(k_vects) 
+    #gamma = 0.1 / H_PLANC
     qi_tensor = np.zeros([3,3,6], complex)
-    omega = arguments.omega
+    omega = arguments.omega 
     for k in range(int(index), num_kpoints, arguments.number_of_processes):
-        if k >= arguments.number_of_processes:
-            num.value += 1
-        lock.acquire()
-        try: 
-            pass
-            Progres_bar(num.value, num_kpoints)
-        finally:
-            lock.release()
-        gap_at_k = (energies[0,k,min(conduction_states)] - energies[0,k,max(valence_states)]) / H_PLANC
-        #if (gap_at_k  > 2 * omega):
-        #    continue
+        if not arguments.silence:
+            if k >= arguments.number_of_processes:
+                num.value += 1
+            lock.acquire()
+            try: 
+                Progres_bar(num.value, num_kpoints)
+            finally:
+                lock.release()
         qi_tensor += Band_Sum(k, energies[0,k,:], num_bands, k_weights[k], gamma, wavecar_data, valence_states, conduction_states)
-    num.value += 1
-    lock.acquire()
-    try:    
-        pass
-        Progres_bar(num.value, num_kpoints)
-    finally:
-        lock.release()
-
-    volume = wavecar_data._Omega * 10**(-30) #Volume of the supercell used in VASP calculations in m^3
-    prefactor = (2 * np.pi) **3 / (sum(k_weights) * volume)  / 4 / np.pi ** 2 * 1j * (E_CHARGE / M_ELECTRON)**4 * H_PLANC * 10**(40) * E_CHARGE 
+    volume = wavecar_data._Omega * 10**(-30) / np.linalg.norm(k_vects[0] - k_vects[1]) ** 3
+    prefactor = (2 * np.pi) **3 / (volume)  / 4 / np.pi ** 2 * 1j * (E_CHARGE / M_ELECTRON)**4 * H_PLANC * 10**(40) * E_CHARGE 
     qi_tensor *= prefactor
     return qi_tensor
 
@@ -205,27 +199,28 @@ def Band_Sum(k_index, bands_energies, n_bands, weight, gamma, wf_obj, valence_st
     '''
     Sum over all valence, conduction and intemediate sattes
     '''
-    #delta = max(np.matmul(wf_obj._kvecs[1], wf_obj._Bcell) - np.matmul(wf_obj._kvecs[0], wf_obj._Bcell))
-    #gamma = 2 * np.linalg.norm(np.matmul(wf_obj._kvecs[k_index], wf_obj._Bcell)) * delta
-    #gamma += delta ** 2
-    #gamma *= (H_PLANC / 2 / M_ELECTRON * E_CHARGE * 10**20)
     inner_tensor_output = np.zeros([3,3,6], complex)
     omega = arguments.omega
     all_bnds = valence_states + conduction_states
     for initial in valence_states:
         for final in conduction_states:
             omega_fv = (bands_energies[final] - bands_energies[initial]) / H_PLANC
+            omega_fv_1 = (bands_energies[final] + bands_energies[initial]) / H_PLANC / 2
+            Gauss_weight = Gauss(omega_fv, 2 * omega, gamma)
+            if Gauss_weight < Gauss( 2 * omega -2 * gamma, 2 * omega, gamma):
+                continue
             for inter in all_bnds:
-                omega_jv = (bands_energies[inter] - bands_energies[initial]) / H_PLANC
-                inner_tensor = Get_all_elements(wf_obj, initial, final, inter, omega_fv, k_index, wf_obj)
-                inner_tensor *= Gauss(omega_fv, 2 * omega, gamma)
-                #print(Gauss(omega_fv, 2 * omega, gamma), bands_energies[final] - bands_energies[initial], inner_tensor[0][0][0][0])
-                inner_tensor /= (omega_fv / 2 - omega_jv) * ( omega_fv / 2 )**3
+                omega_i = (bands_energies[inter]) / H_PLANC
+                inner_tensor = Get_all_elements(initial, final, inter, omega_fv, k_index, wf_obj)
+                inner_tensor *= Gauss_weight
+                #print(Gauss(omega_fv, 2 * omega, gamma), bands_energies[final] - bands_energies[initial], inner_tensor[0][0][0])
+                nom = ((omega_i - omega_fv_1) * ( omega_fv)**3)
+                inner_tensor = inner_tensor / nom
                 inner_tensor *= weight
                 inner_tensor_output += inner_tensor
     return inner_tensor_output
 
-def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index, wf):
+def Get_all_elements(init, fin, iner, omega_fv, k_index, wf):
     '''
     Compute all 81 elements of the tensor
     '''
@@ -251,8 +246,8 @@ def Get_all_elements(wf_obj, init, fin, iner, omega_fv, k_index, wf):
             for i_s in range(0,6):
                     i3 = indices_symmetry[i_s][0]
                     i4 = indices_symmetry[i_s][1]
-                    inner_inner_tensor[i1][i2][i_s] = (p_vv[i1] - p_ff[i2]) * p_vf[i2] * (p_fj[i3] * p_jv[i4] + p_fj[i4] * p_jv[i3])/  2
+                    inner_inner_tensor[i1][i2][i_s] = (p_vv[i1] - p_ff[i1]) * p_vf[i2] * (p_fj[i3] * p_jv[i4] + p_fj[i4] * p_jv[i3]) / 2
     return inner_inner_tensor
 
 def Gauss(x, x0, gamma):
-        return 1 / (2 * np.pi) ** (1/2) / gamma * np.exp( - (x-x0)**2 / 2 / gamma**2)
+        return 1 / (2 * np.pi) ** (1/2) / gamma * np.exp( - ((x-x0)**2) /  ( 2 * gamma**2))

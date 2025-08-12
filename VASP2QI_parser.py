@@ -86,6 +86,10 @@ def get_args():
     parser.add_argument('--exclude_k',
                         action = 'store_true',
                         help = 'Whether to exclude the k terms in the momentum matrices')
+    parser.add_argument( '--silence',
+                        action='store_true',
+                        help = 'Whether to output the loading bar',
+                        )
     
     arguments =  parser.parse_args()
     Process = subprocess.run(args=['./VASP2QI_kparsing.sh', arguments.source], capture_output = True)
