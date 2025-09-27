@@ -176,7 +176,7 @@ def Enter_Sum(index):
     k_vects = wavecar_data._kvecs
     num_bands = wavecar_data._nbands
     [valence_states, conduction_states] = Find_valence_cond(energies, num_bands, wavecar_data._efermi)
-    gamma = Get_gamma(k_vects)
+    gamma = Get_gamma(k_vects) / 2
     #gamma = 0.1 / H_PLANC
     qi_tensor = np.zeros([3,3,6], complex)
     omega = arguments.omega 
@@ -191,7 +191,7 @@ def Enter_Sum(index):
                 lock.release()
         qi_tensor += Band_Sum(k, energies[0,k ,:], num_bands, k_weights[k], gamma, wavecar_data, valence_states, conduction_states)
     volume = wavecar_data._Omega * 10**(-30) / np.linalg.norm(k_vects[0] - k_vects[1]) ** 3
-    prefactor = (2 * np.pi) **3 / (volume)  / 4 / np.pi ** 2 * 1j * (E_CHARGE / M_ELECTRON)**4 * H_PLANC * 10**(40) * E_CHARGE 
+    prefactor = (2 * np.pi) **3 / (volume)  / 8 / np.pi ** 2 * 1j * (E_CHARGE / M_ELECTRON)**4 * H_PLANC * 10**(40) * E_CHARGE 
     qi_tensor *= prefactor
     return qi_tensor
 
@@ -207,13 +207,12 @@ def Band_Sum(k_index, bands_energies, n_bands, weight, gamma, wf_obj, valence_st
             omega_fv = (bands_energies[final] - bands_energies[initial]) / H_PLANC
             omega_fv_1 = (bands_energies[final] + bands_energies[initial]) / H_PLANC / 2
             Gauss_weight = Gauss(omega_fv, 2 * omega, gamma)
-            if Gauss_weight < Gauss( 2 * omega -2 * gamma, 2 * omega, gamma):
+            if Gauss_weight < Gauss( 2 * omega -3 * gamma, 2 * omega, gamma):
                 continue
             for inter in all_bnds:
                 omega_i = (bands_energies[inter]) / H_PLANC
                 inner_tensor = Get_all_elements(initial, final, inter, omega_fv, k_index, wf_obj)
                 inner_tensor *= Gauss_weight
-                #print(Gauss(omega_fv, 2 * omega, gamma), bands_energies[final] - bands_energies[initial], inner_tensor[0][0][0])
                 nom = ((omega_i - omega_fv_1) * ( omega_fv)**3)
                 inner_tensor = inner_tensor / nom
                 inner_tensor *= weight
@@ -250,4 +249,4 @@ def Get_all_elements(init, fin, iner, omega_fv, k_index, wf):
     return inner_inner_tensor
 
 def Gauss(x, x0, gamma):
-        return 1 / (2 * np.pi) ** (1/2) / gamma * np.exp( - ((x-x0)**2) /  ( 2 * gamma**2))
+       return 1 / (2 * np.pi) ** (1/2) / gamma * np.exp( - ((x-x0)**2) /  ( 2 * gamma**2))

@@ -30,7 +30,7 @@ def Write_tensor(arguments):
         if (arguments[1].omega_run):
             if (arguments[1].omega_step == None) or (arguments[1].omega_max == None):
                 Write_omega_max_step_missing(file, arguments)
-            elif (arguments[1].omega_max < 1):
+            elif (arguments[1].omega_max / H_PLANC < arguments[1].omega):
                 Write_wrong_omega_max(file, arguments)
             else:
                 Write_multiple_omega(file, arguments)
@@ -56,7 +56,7 @@ def Write_multiple_omega(f, arg):
     omega = arg[1].omega 
     omega_step = arg[1].omega_step / H_PLANC
     omega_max = arg[1].omega_max / H_PLANC
-    print('Going from ', '%.2E' % omega, 'to ', '%.2E' % omega_max, 'with a step of ', '%.2E' % omega_step, file = sys.stderr)
+    print('Going from ', '%.2E' % (omega * H_PLANC), 'ev to ', '%.2E' % (omega_max * H_PLANC), ' ev with a step of ', '%.2E' % (omega_step * H_PLANC),'ev.', file = sys.stderr)
     freq = np.arange(omega, omega_max + omega_step, omega_step)
     ii = 1
     for om in freq:
